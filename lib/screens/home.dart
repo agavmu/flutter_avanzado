@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/socket.dart';
 
 import '../models/models.dart';
 
@@ -13,34 +16,57 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Band> bands = [
-    Band(id: '1', name: 'Los corraleros de majagual', votes: 1),
-    Band(id: '2', name: 'Pecos kanvas', votes: 5),
-    Band(id: '3', name: 'La sonora dinamita', votes: 3),
-    Band(id: '4', name: 'Natusha', votes: 2),
-  ];
+  List<Band> bands = [];
+
+  @override
+  void initState() {
+    final socket = Provider.of<Socket>(context, listen: false);
+
+    socket.socket.on('active-bands', (payload) {
+      bands = (payload as List).map((band) => Band.fromMap(band)).toList();
+      setState(() {});
+    });
+
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final socket = Provider.of<Socket>(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('BandNames'),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 10),
+            child: socket.serverStatus == ServerStatus.online
+                ? Icon(
+                    Icons.check_circle_outline_outlined,
+                    color: Colors.green.shade300,
+                  )
+                : const Icon(
+                    Icons.offline_bolt_outlined,
+                    color: Colors.red,
+                  ),
+          )
+        ],
       ),
       body: ListView.builder(
         itemCount: bands.length,
-        itemBuilder: (context, i) => bandTile(bands[i]),
+        itemBuilder: (context, i) => _bandTile(bands[i]),
       ),
       floatingActionButton: FloatingActionButton(
-          child: const Icon(Icons.add), onPressed: addNewBand),
+          onPressed: addNewBand, child: const Icon(Icons.add)),
     );
   }
 
-  Widget bandTile(Band band) {
+  Widget _bandTile(Band band) {
+    final socket = Provider.of<Socket>(context, listen: false);
     return Dismissible(
       key: Key(band.id),
       background: Container(
         color: Colors.red,
-        child: Align(
+        child: const Align(
           alignment: Alignment.centerRight,
           child: Icon(
             Icons.delete,
@@ -56,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(band.name),
         trailing: Text('${band.votes}'),
         onTap: () {
-          print('aqui');
+          socket.emit('vote-band', {'id': band.id});
         },
       ),
     );
@@ -112,9 +138,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   addBandToList(String name) {
     if (name.length > 1) {
-      bands.add(Band(id: DateTime.now().toString(), name: name, votes: 2));
-      setState(() {});
+      final socket = Provider.of<Socket>(context, listen: false);
+      socket.emit('add-band', {'name': name});
     }
-    Navigator.pop(context);
   }
 }
